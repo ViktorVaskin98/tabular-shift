@@ -33,11 +33,33 @@ def summarize(raw: pd.DataFrame) -> pd.DataFrame:
     return table.sort_values(["split", "model"])
 
 
-def plot_metric(table: pd.DataFrame, metric: str, ylabel: str, title: str, out: Path) -> None:
+STYLE = {
+    "font.size": 12,
+    "axes.titlesize": 14,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 12,
+    "figure.dpi": 150,
+    "savefig.dpi": 150,
+    "savefig.bbox": "tight",
+}
+
+
+def plot_metric(
+    table: pd.DataFrame,
+    metric: str,
+    ylabel: str,
+    title: str,
+    out: Path,
+    bounds: tuple[float, float] = (0.0, 1.0),
+) -> None:
+    plt.rcParams.update(STYLE)
+    lower, upper = bounds
     splits = [s for s in SPLIT_ORDER if s in set(table["split"].astype(str))]
     models = [m for m in MODEL_ORDER if m in set(table["model"].astype(str))]
     width = 0.8 / len(models)
-    fig, ax = plt.subplots(figsize=(11, 4.2), dpi=160)
+    fig, ax = plt.subplots(figsize=(13, 5.4))
     for i, model in enumerate(models):
         rows = table[table["model"] == model].set_index("split").reindex(splits)
         x = np.arange(len(splits)) + (i - (len(models) - 1) / 2) * width
@@ -45,19 +67,33 @@ def plot_metric(table: pd.DataFrame, metric: str, ylabel: str, title: str, out: 
             x,
             rows[metric],
             width,
-            yerr=rows[f"{metric}_sd"],
-            capsize=2,
+            yerr=[
+                np.minimum(rows[f"{metric}_sd"], rows[metric] - lower),
+                np.minimum(rows[f"{metric}_sd"], upper - rows[metric]),
+            ],
+            capsize=3,
+            error_kw={"elinewidth": 1.2},
             color=COLORS[model],
             label=LABELS[model],
         )
     ax.set_xticks(np.arange(len(splits)), splits, rotation=20, ha="right")
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    ax.axvline(1.5, color="grey", linewidth=0.8, linestyle=":")
+    ax.set_title(title, pad=34)
+    ax.axvline(1.5, color="grey", linewidth=1, linestyle=":")
+    top = ax.get_ylim()[1]
+    ax.text(0.5, top, "IID", ha="center", va="bottom", fontsize=12, color="grey")
+    ax.text(
+        (len(splits) + 1) / 2,
+        top,
+        "distribution shift",
+        ha="center",
+        va="bottom",
+        fontsize=12,
+        color="grey",
+    )
     ax.grid(axis="y", alpha=0.3, linewidth=0.5)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(frameon=False, fontsize=8, ncol=len(models))
-    fig.tight_layout()
+    ax.legend(frameon=False, ncol=len(models), loc="lower center", bbox_to_anchor=(0.5, 1.0))
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out)
     plt.close(fig)
@@ -78,14 +114,14 @@ def main() -> None:
         table,
         "spearman",
         "Spearman ρ (mean ± sd over seeds)",
-        "Ranking quality: IID splits (left of the line) vs shifted splits",
+        "Ranking quality across train/test splits",
         args.figures / "spearman_by_split.png",
     )
     plot_metric(
         table,
         "precision_at_50",
         "Precision@50 for top-10% Tc",
-        "Screening: share of true top-10% materials among the 50 best predictions",
+        "Screening: true top-10% materials among each model's 50 best candidates",
         args.figures / "screening_by_split.png",
     )
     extrapolation = raw[raw["split"] == "tc-extrapolation"]
