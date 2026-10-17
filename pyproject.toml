@@ -3,6 +3,7 @@ name = "tabular-shift"
 version = "0.1.0"
 description = "Do tabular foundation models keep their edge under distribution shift? Superconductor Tc prediction and screening."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "catboost>=1.2.10",
